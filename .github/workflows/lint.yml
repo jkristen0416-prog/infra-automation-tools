@@ -1,0 +1,50 @@
+name: lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  powershell-lint:
+    name: PowerShell (PSScriptAnalyzer)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+          Import-Module PSScriptAnalyzer
+
+      - name: Run PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          # PSAvoidUsingWriteHost se excluye deliberadamente: los scripts son
+          # herramientas CLI para operadores y usan Write-Host para output
+          # coloreado de estado (verde/amarillo). El resto de reglas se
+          # aplican de forma estricta.
+          $results = Invoke-ScriptAnalyzer -Path ./scripts -Recurse -ExcludeRule PSAvoidUsingWriteHost
+          $results | Format-Table RuleName, Severity, ScriptName, Line, Message -AutoSize
+          if ($results | Where-Object { $_.Severity -in @('Error', 'Warning') }) {
+            throw "PSScriptAnalyzer encontró errores o warnings. Revisar la salida."
+          }
+          Write-Host "PSScriptAnalyzer: OK ($($results.Count) hallazgos)"
+
+  markdown-lint:
+    name: Markdown (markdownlint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run markdownlint
+        uses: DavidAnson/markdownlint-cli2-action@v19
+        with:
+          globs: |
+            README.md
+            docs/*.md
+          config: .markdownlint.json
