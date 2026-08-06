@@ -21,7 +21,7 @@ exports de configuración, etc.
 ## Requisitos
 
 | Requisito | Detalle |
-|---|---|
+| --- | --- |
 | Permisos | Lectura sobre las rutas a verificar |
 | Rutas UNC | Cuenta con acceso a la red, o `New-SmbMapping` previo |
 | PowerShell | 5.1+ o PowerShell 7 (Core) |
@@ -35,7 +35,7 @@ Invoke-WebRequest -Uri "https://raw.githubusercontent.com/jkristen0416-prog/infr
 ## Parámetros
 
 | Parámetro | Tipo | Obligatorio | Por defecto | Descripción |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | `-Path` | string[] | **Sí** | — | Rutas a verificar (carpetas o archivos) |
 | `-MaxAgeHours` | int | No | 24 | Antigüedad máxima permitida en horas |
 | `-Pattern` | string | No | `*` | Filtro de archivos dentro de carpetas |
@@ -64,7 +64,7 @@ Invoke-WebRequest -Uri "https://raw.githubusercontent.com/jkristen0416-prog/infr
 
 ### Ejemplo de salida (datos ficticios)
 
-```
+```text
 Path                    LatestFile      LastWrite           AgeHours Status
 ----                    ----------      ---------           -------- ------
 D:\Backups\Veeam        backup-08-05.vbk 2026-08-05 22:00:00  12.5    OK
@@ -81,7 +81,7 @@ ALERTA: 1 backup(s) vencido(s) (mayores a 24 horas).
 
 1. Crear una tarea programada que ejecute:
 
-   ```
+   ```text
    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Scripts\Test-BackupFreshness.ps1" -Path "D:\Backups\Veeam" -MaxAgeHours 24 -ExitOnStale
    ```
 
@@ -91,7 +91,7 @@ ALERTA: 1 backup(s) vencido(s) (mayores a 24 horas).
 ## Manejo de errores
 
 | Escenario | Comportamiento |
-|---|---|
+| --- | --- |
 | Ruta inexistente | Marca la fila como `RUTA INEXISTENTE`, continúa con las demás |
 | Carpeta sin archivos que coincidan | Marca `SIN ARCHIVOS`, continúa |
 | Sin permisos sobre la ruta | `Write-Warning` + fila con estado de problema |
@@ -101,7 +101,7 @@ ALERTA: 1 backup(s) vencido(s) (mayores a 24 horas).
 ## Exit codes
 
 | Código | Significado |
-|---|---|
+| --- | --- |
 | 0 | Todos los backups al día |
 | 1 | Al menos un backup vencido (con `-ExitOnStale`) o rutas con problemas |
 | 2 | Error de ejecución |

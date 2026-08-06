@@ -20,7 +20,7 @@ rendimiento de la VM. Este script **solo audita**, no elimina nada.
 ## Requisitos
 
 | Requisito | Detalle |
-|---|---|
+| --- | --- |
 | VMware PowerCLI | `Install-Module VMware.PowerCLI -Scope CurrentUser` |
 | Cuenta vCenter | Permiso de **solo lectura** sobre VMs y snapshots |
 | PowerShell | 5.1+ o PowerShell 7 (Core) |
@@ -39,7 +39,7 @@ Invoke-WebRequest -Uri "https://raw.githubusercontent.com/jkristen0416-prog/infr
 ## Parámetros
 
 | Parámetro | Tipo | Obligatorio | Por defecto | Descripción |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | `-VCenter` | string | **Sí** | — | FQDN o IP del vCenter |
 | `-Credential` | PSCredential | No | Se solicita | Credencial de solo lectura |
 | `-MaxAgeDays` | int | No | 30 | Antigüedad máxima aceptable en días |
@@ -69,7 +69,7 @@ Invoke-WebRequest -Uri "https://raw.githubusercontent.com/jkristen0416-prog/infr
 
 ### Ejemplo de salida (datos ficticios)
 
-```
+```text
 GeneratedAt      : 2026-08-06 10:00:00
 VCenter          : vc01.corp.local
 VMsWithSnapshots : 4
@@ -95,7 +95,7 @@ ALERTA: 2 snapshot(s) superan los 30 dias. Revisar y consolidar.
 ## Manejo de errores
 
 | Escenario | Comportamiento |
-|---|---|
+| --- | --- |
 | PowerCLI no instalado | Error claro con el comando de instalación |
 | Credenciales inválidas | Error de autenticación de PowerCLI |
 | vCenter inaccesible | Error de conexión |
@@ -105,7 +105,7 @@ ALERTA: 2 snapshot(s) superan los 30 dias. Revisar y consolidar.
 ## Exit codes
 
 | Código | Significado |
-|---|---|
+| --- | --- |
 | 0 | Sin snapshots STALE (o `-ExitOnStale` no usado) |
 | 1 | Existen snapshots STALE y se usó `-ExitOnStale` |
 | 2 | Error de ejecución |

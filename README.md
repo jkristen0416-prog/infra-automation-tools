@@ -10,7 +10,7 @@ administración de infraestructura.
 
 ## Estructura
 
-```
+```text
 ├── scripts/
 │   ├── Get-ADHealthReport.ps1        # Reporte de salud de Active Directory
 │   ├── Get-VMwareSnapshotAudit.ps1   # Auditoría de snapshots vSphere
@@ -26,7 +26,7 @@ administración de infraestructura.
 ## Herramientas
 
 | Herramienta | Área | Propósito | Documentación |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `Get-ADHealthReport.ps1` | Active Directory | Estado del dominio: DCs, replicación, cuentas, expiración de contraseñas, último backup | [docs](docs/Get-ADHealthReport.md) |
 | `Get-VMwareSnapshotAudit.ps1` | VMware vSphere | Snapshots antiguos por VM, tamaño y alerta de consolidación | [docs](docs/Get-VMwareSnapshotAudit.md) |
 | `Test-BackupFreshness.ps1` | Backups | Antigüedad del backup más reciente por ruta, con exit code para monitoreo | [docs](docs/Test-BackupFreshness.md) |
@@ -55,7 +55,7 @@ administración de infraestructura.
 ## Exit codes (integración con monitoreo)
 
 | Código | Significado |
-|---|---|
+| --- | --- |
 | 0 | Todo correcto / sin hallazgos |
 | 1 | Hallazgo que requiere atención (snapshot vencido, backup vencido, AD con revisión) |
 | 2 | Error de ejecución |

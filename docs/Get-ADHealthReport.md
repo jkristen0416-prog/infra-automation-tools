@@ -20,7 +20,7 @@ reporte:
 ## Requisitos
 
 | Requisito | Detalle |
-|---|---|
+| --- | --- |
 | Módulo `ActiveDirectory` | RSAT-AD-PowerShell instalado, o ejecución desde un equipo con el módulo |
 | Permisos | Lectura sobre AD (usuario de dominio estándar suele bastar) |
 | `repadmin.exe` | Opcional — solo para el chequeo de replicación (está en los DCs) |
@@ -41,7 +41,7 @@ Invoke-WebRequest -Uri "https://raw.githubusercontent.com/jkristen0416-prog/infr
 ## Parámetros
 
 | Parámetro | Tipo | Obligatorio | Por defecto | Descripción |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | `-DomainController` | string | No | DC del sitio | Nombre o IP del DC a consultar |
 | `-Credential` | PSCredential | No | Sesión actual | Credencial con permisos de lectura |
 | `-ExpiryWarningDays` | int | No | 14 | Días previos al vencimiento para marcar "próxima a expirar" |
@@ -71,7 +71,7 @@ Invoke-WebRequest -Uri "https://raw.githubusercontent.com/jkristen0416-prog/infr
 
 ### Ejemplo de salida (datos ficticios)
 
-```
+```text
 GeneratedAt           : 2026-08-06 09:30:00
 Domain                : corp.local
 DomainMode            : Windows2016Domain
@@ -99,7 +99,7 @@ Estado general: OK
 ## Manejo de errores
 
 | Escenario | Comportamiento |
-|---|---|
+| --- | --- |
 | Módulo AD no instalado | Error claro indicando instalar RSAT-AD-PowerShell |
 | DC inaccesible | Error de conexión con el mensaje de la excepción |
 | `repadmin` ausente | El campo `ReplicationStatus` indica que no está disponible (no aborta) |
@@ -109,7 +109,7 @@ Estado general: OK
 ## Exit codes
 
 | Código | Significado |
-|---|---|
+| --- | --- |
 | 0 | Estado general OK |
 | 1 | Revisión requerida (DC caído, replicación con problemas o cuentas expiradas) |
 | 2 | Error de ejecución |
