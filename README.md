@@ -67,7 +67,10 @@ administración de infraestructura.
 | 1 | Hallazgo que requiere atención (snapshot vencido, backup vencido, AD con revisión) |
 | 2 | Error de ejecución |
 
-## Salida de ejemplo (output real)
+## Salida de demostración generada mediante una ejecución real
+
+> Los resultados fueron generados ejecutando las herramientas en un entorno
+> controlado con rutas, nombres y datos ficticios.
 
 ### Flujo de operación
 
@@ -127,7 +130,7 @@ ALERTA: 1 backup(s) vencido(s) (mayores a 24 horas).
 ```
 
 > ⚠️ Rutas y nombres de archivo son ficticios (entorno de demostración).
-> Cada `docs/` incluye el sample output de su herramienta.
+> Cada `docs/` incluye la salida de demostración de su herramienta.
 
 ## Validación automática (CI)
 
