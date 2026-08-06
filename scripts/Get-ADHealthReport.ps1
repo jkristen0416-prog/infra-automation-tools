@@ -111,6 +111,35 @@ function ConvertTo-ReportDate {
     return $Value.ToString('yyyy-MM-dd HH:mm:ss')
 }
 
+function Get-ExpiredPasswordUser {
+    <#
+    .SYNOPSIS
+        Calcula los usuarios con contraseña ya vencida (antigüedad >= maxPwdAge).
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [object[]]$Users,
+
+        [Parameter(Mandatory = $false)]
+        [int]$MaxAgeDays,
+
+        [Parameter(Mandatory = $false)]
+        [datetime]$Now = (Get-Date)
+    )
+
+    if (-not $MaxAgeDays) { return @() }
+
+    # Filtrar primero los que tienen PasswordLastSet (evita $Now - $null)
+    return @($Users | Where-Object { $_.PasswordLastSet } | ForEach-Object {
+        $ageDays = ($Now - $_.PasswordLastSet).TotalDays
+        if (-not $_.PasswordNeverExpires -and
+            $_.Enabled -and
+            $ageDays -ge $MaxAgeDays) {
+            $_
+        }
+    })
+}
+
 function Get-DomainMaxPasswordAge {
     <#
     .SYNOPSIS
@@ -172,11 +201,15 @@ function Get-PasswordExpiringUser {
 
     if (-not $MaxAgeDays) { return @() }
 
-    return @($Users | Where-Object {
-        $_.PasswordLastSet -and
-        -not $_.PasswordNeverExpires -and
-        $_.Enabled -and
-        ($Now - $_.PasswordLastSet).TotalDays -ge ($MaxAgeDays - $ExpiryWarningDays)
+    # Filtrar primero los que tienen PasswordLastSet (evita $Now - $null)
+    return @($Users | Where-Object { $_.PasswordLastSet } | ForEach-Object {
+        $ageDays = ($Now - $_.PasswordLastSet).TotalDays
+        if (-not $_.PasswordNeverExpires -and
+            $_.Enabled -and
+            $ageDays -ge ($MaxAgeDays - $ExpiryWarningDays) -and
+            $ageDays -lt $MaxAgeDays) {
+            $_
+        }
     })
 }
 
@@ -202,7 +235,7 @@ if ($MyInvocation.InvocationName -ne '.') {
         DomainMode         = $domainInfo.DomainMode
         ForestMode         = $domainInfo.ForestMode
         TotalDCs           = @($dcs).Count
-        OnlineDCs          = @($dcs | Where-Object { $_.IsEnabled }).Count
+        EnabledDCs         = @($dcs | Where-Object { $_.IsEnabled }).Count
         DCList             = @($dcs | ForEach-Object { $_.Name })
     }
 
@@ -221,10 +254,12 @@ if ($MyInvocation.InvocationName -ne '.') {
     $maxPwdAgeDays = Get-DomainMaxPasswordAge -SessionParams $session -DomainInfo $domainInfo
 
     $passwordExpiring = @(Get-PasswordExpiringUser -Users $allUsers -MaxAgeDays $maxPwdAgeDays -ExpiryWarningDays $ExpiryWarningDays -Now $now)
+    $expiredPasswords = @(Get-ExpiredPasswordUser -Users $allUsers -MaxAgeDays $maxPwdAgeDays -Now $now)
 
     $report['TotalUsers']          = @($allUsers).Count
     $report['DisabledUsers']       = @($disabled).Count
     $report['ExpiredAccounts']     = @($expired).Count
+    $report['ExpiredPasswords']    = @($expiredPasswords).Count
     $report['NeverExpirePasswords']= @($noExpire).Count
     $report['PasswordsExpiringSoon'] = @($passwordExpiring).Count
     $report['MaxPasswordAgeDays']  = $maxPwdAgeDays
@@ -261,7 +296,7 @@ if ($MyInvocation.InvocationName -ne '.') {
     }
 
     # Resultado consolidado
-    $ok = ($report['OnlineDCs'] -eq $report['TotalDCs']) -and
+    $ok = ($report['EnabledDCs'] -eq $report['TotalDCs']) -and
           ($report['ReplicationStatus'] -eq 'OK') -and
           ($report['ExpiredAccounts'] -eq 0)
 

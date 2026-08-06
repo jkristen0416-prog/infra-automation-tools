@@ -59,6 +59,31 @@ Describe 'Get-PasswordExpiringUser' {
         $expiring.Name | Should -Be @('user-expiring')
     }
 
+    It 'no incluye contraseñas ya vencidas' {
+        # Contraseña de 70 días con maxPwdAge de 60: ya vencida, no "próxima a expirar"
+        $expiredUser = [PSCustomObject]@{
+            Name                 = 'user-expired'
+            PasswordLastSet      = $now.AddDays(-70)
+            PasswordNeverExpires = $false
+            Enabled              = $true
+        }
+
+        $result = Get-PasswordExpiringUser -Users @($expiredUser) -MaxAgeDays 60 -ExpiryWarningDays 14 -Now $now
+        $result | Should -HaveCount 0
+    }
+
+    It 'no incluye contraseñas recién establecidas (fuera de la ventana)' {
+        $recentUser = [PSCustomObject]@{
+            Name                 = 'user-recent'
+            PasswordLastSet      = $now.AddDays(-10)
+            PasswordNeverExpires = $false
+            Enabled              = $true
+        }
+
+        $result = Get-PasswordExpiringUser -Users @($recentUser) -MaxAgeDays 60 -ExpiryWarningDays 14 -Now $now
+        $result | Should -HaveCount 0
+    }
+
     It 'devuelve lista vacía cuando no hay MaxAgeDays' {
         $expiring = Get-PasswordExpiringUser -Users $users -MaxAgeDays 0 -ExpiryWarningDays 14 -Now $now
         $expiring | Should -HaveCount 0
@@ -68,5 +93,33 @@ Describe 'Get-PasswordExpiringUser' {
         # umbral 1 día: solo expira lo que está a menos de 1 día de vencer
         $expiring = Get-PasswordExpiringUser -Users $users -MaxAgeDays 60 -ExpiryWarningDays 1 -Now $now
         $expiring | Should -HaveCount 0
+    }
+}
+
+Describe 'Get-ExpiredPasswordUser' {
+    BeforeAll {
+        $now = Get-Date
+        $users = @(
+            [PSCustomObject]@{ Name = 'user-ok';       PasswordLastSet = $now.AddDays(-30); PasswordNeverExpires = $false; Enabled = $true }
+            [PSCustomObject]@{ Name = 'user-expired';  PasswordLastSet = $now.AddDays(-70); PasswordNeverExpires = $false; Enabled = $true }
+            [PSCustomObject]@{ Name = 'user-never';    PasswordLastSet = $now.AddDays(-70); PasswordNeverExpires = $true;  Enabled = $true }
+            [PSCustomObject]@{ Name = 'user-disabled'; PasswordLastSet = $now.AddDays(-70); PasswordNeverExpires = $false; Enabled = $false }
+        )
+    }
+
+    It 'detecta contraseñas vencidas (antigüedad >= maxPwdAge)' {
+        $expired = Get-ExpiredPasswordUser -Users $users -MaxAgeDays 60 -Now $now
+        $expired.Name | Should -Be @('user-expired')
+    }
+
+    It 'no incluye contraseñas próximas a expirar ni vigentes' {
+        $expired = Get-ExpiredPasswordUser -Users $users -MaxAgeDays 60 -Now $now
+        $expired.Name | Should -Not -Contain 'user-ok'
+        $expired.Name | Should -Not -Contain 'user-never'
+    }
+
+    It 'devuelve lista vacía cuando no hay MaxAgeDays' {
+        $expired = Get-ExpiredPasswordUser -Users $users -MaxAgeDays 0 -Now $now
+        $expired | Should -HaveCount 0
     }
 }

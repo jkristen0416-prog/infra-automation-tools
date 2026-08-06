@@ -1,5 +1,7 @@
 # infra-automation-tools
 
+[![CI](https://github.com/jkristen0416-prog/infra-automation-tools/actions/workflows/lint.yml/badge.svg)](https://github.com/jkristen0416-prog/infra-automation-tools/actions/workflows/lint.yml)
+
 Herramientas de automatización para controles operativos, auditorías y
 administración de infraestructura.
 

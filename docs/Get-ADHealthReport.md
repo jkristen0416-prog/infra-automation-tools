@@ -7,11 +7,13 @@ Reporte de salud de Active Directory con controles operativos básicos.
 Realiza comprobaciones sobre el estado del dominio y las genera en un único
 reporte:
 
-- Controladores de dominio disponibles y habilitados
+- Controladores de dominio disponibles y habilitados (`EnabledDCs` — no
+  implica disponibilidad de red; para eso se usa la replicación)
 - Estado de replicación (vía `repadmin /replsummary`)
 - Total de cuentas de usuario
 - Cuentas deshabilitadas
 - Cuentas expiradas
+- Contraseñas vencidas (`ExpiredPasswords`)
 - Contraseñas que nunca expiran
 - Contraseñas próximas a expirar (según `maxPwdAge` del dominio, obtenido
   con `Get-ADDefaultDomainPasswordPolicy` y fallback a `Get-ADDomain`)
@@ -90,11 +92,12 @@ Domain                : corp.local
 DomainMode            : Windows2016Domain
 ForestMode            : Windows2016Forest
 TotalDCs              : 3
-OnlineDCs             : 3
+EnabledDCs            : 3
 DCList                : {dc01, dc02, dc03}
 TotalUsers            : 1240
 DisabledUsers         : 18
 ExpiredAccounts       : 0
+ExpiredPasswords      : 5
 NeverExpirePasswords  : 7
 PasswordsExpiringSoon : 23
 MaxPasswordAgeDays    : 60
