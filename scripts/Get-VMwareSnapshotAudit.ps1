@@ -112,61 +112,83 @@ function Initialize-CertificatePolicy {
 }
 
 function Format-Size {
-    param([double]$Bytes)
-    if ($Bytes -ge 1TB) { return ('{0:N2} TB' -f ($Bytes / 1TB)) }
-    if ($Bytes -ge 1GB) { return ('{0:N2} GB' -f ($Bytes / 1GB)) }
-    if ($Bytes -ge 1MB) { return ('{0:N2} MB' -f ($Bytes / 1MB)) }
-    return ('{0:N0} B' -f $Bytes)
+    param([double]$SizeGb)
+    return ('{0:N2} GB' -f $SizeGb)
+}
+
+function Get-SnapshotAuditRow {
+    <#
+    .SYNOPSIS
+        Genera la fila de auditoría a partir de un snapshot de vSphere.
+        Devuelve un PSCustomObject con estado OK o STALE según el umbral.
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$VMName,
+
+        [Parameter(Mandatory = $true)]
+        [object]$Snapshot,
+
+        [Parameter(Mandatory = $false)]
+        [int]$MaxAgeDays = 30,
+
+        [Parameter(Mandatory = $false)]
+        [datetime]$Now = (Get-Date)
+    )
+
+    $ageDays = [math]::Round(($Now - $Snapshot.Created).TotalDays, 1)
+    $isStale = $ageDays -gt $MaxAgeDays
+
+    return [PSCustomObject]@{
+        VMName        = $VMName
+        SnapshotName  = $Snapshot.Name
+        Description   = $Snapshot.Description
+        Created       = $Snapshot.Created.ToString('yyyy-MM-dd HH:mm:ss')
+        AgeDays       = $ageDays
+        Size          = Format-Size ([double]$Snapshot.SizeGB)
+        IsCurrent     = $Snapshot.IsCurrent
+        Status        = if ($isStale) { 'STALE' } else { 'OK' }
+    }
 }
 
 # ---------------------------------------------------------------------------
-# Main
+# Main (se omite al dot-sourcear para permitir pruebas con Pester)
 # ---------------------------------------------------------------------------
 
-try {
-    Assert-PowerCLI
-    Initialize-CertificatePolicy -SkipValidation:$SkipCertificateCheck
+if ($MyInvocation.InvocationName -ne '.') {
+    try {
+        Assert-PowerCLI
+        Initialize-CertificatePolicy -SkipValidation:$SkipCertificateCheck
 
-    Write-Verbose "Conectando a vCenter: $VCenter"
-    $cred = $Credential
-    if (-not $cred) {
-        $cred = Get-Credential -Message "Credenciales para $VCenter"
-    }
+        Write-Verbose "Conectando a vCenter: $VCenter"
+        $cred = $Credential
+        if (-not $cred) {
+            $cred = Get-Credential -Message "Credenciales para $VCenter"
+        }
 
-    $connectArgs = @{
-        Server        = $VCenter
-        Credential    = $cred
-        ErrorAction   = 'Stop'
-    }
-    $viServer = Connect-VIServer @connectArgs
+        $connectArgs = @{
+            Server        = $VCenter
+            Credential    = $cred
+            ErrorAction   = 'Stop'
+        }
+        $viServer = Connect-VIServer @connectArgs
 
-    Write-Verbose "Enumerando VMs con snapshots..."
-    $vms = Get-VM | Where-Object { $_.ExtensionData.Snapshot }
+        Write-Verbose "Enumerando VMs con snapshots..."
+        $vms = Get-VM | Where-Object { $_.ExtensionData.Snapshot }
 
-    $now = Get-Date
-    $staleCount = 0
-    $rows = @()
+        $now = Get-Date
+        $staleCount = 0
+        $rows = @()
 
-    foreach ($vm in $vms) {
-        $snapshots = Get-Snapshot -VM $vm | Sort-Object Created
+        foreach ($vm in $vms) {
+            $snapshots = Get-Snapshot -VM $vm | Sort-Object Created
 
-        foreach ($snap in $snapshots) {
-            $ageDays = [math]::Round(($now - $snap.Created).TotalDays, 1)
-            $isStale = $ageDays -gt $MaxAgeDays
-            if ($isStale) { $staleCount++ }
-
-            $rows += [PSCustomObject]@{
-                VMName        = $vm.Name
-                SnapshotName  = $snap.Name
-                Description   = $snap.Description
-                Created       = $snap.Created.ToString('yyyy-MM-dd HH:mm:ss')
-                AgeDays       = $ageDays
-                Size          = Format-Size $snap.SizeGB
-                IsCurrent     = $snap.IsCurrent
-                Status        = if ($isStale) { 'STALE' } else { 'OK' }
+            foreach ($snap in $snapshots) {
+                $row = Get-SnapshotAuditRow -VMName $vm.Name -Snapshot $snap -MaxAgeDays $MaxAgeDays -Now $now
+                if ($row.Status -eq 'STALE') { $staleCount++ }
+                $rows += $row
             }
         }
-    }
 
     $summary = [PSCustomObject]@{
         GeneratedAt      = $now.ToString('yyyy-MM-dd HH:mm:ss')
@@ -207,13 +229,14 @@ try {
     # Exit code para monitoreo
     if ($ExitOnStale -and $staleCount -gt 0) { exit 1 }
     exit 0
-}
-catch {
-    Write-Error "Get-VMwareSnapshotAudit falló: $($_.Exception.Message)"
-    exit 2
-}
-finally {
-    if ($viServer) {
-        Disconnect-VIServer -Server $viServer -Confirm:$false -ErrorAction SilentlyContinue
+    }
+    catch {
+        Write-Error "Get-VMwareSnapshotAudit falló: $($_.Exception.Message)"
+        exit 2
+    }
+    finally {
+        if ($viServer) {
+            Disconnect-VIServer -Server $viServer -Confirm:$false -ErrorAction SilentlyContinue
+        }
     }
 }

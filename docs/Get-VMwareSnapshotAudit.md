@@ -9,7 +9,8 @@ snapshots, generando un reporte con:
 
 - Nombre de la VM y del snapshot
 - Fecha de creación y antigüedad en días
-- Tamaño del snapshot (formateado)
+- Tamaño del snapshot en GB (valor directo de PowerCLI, redondeado a 2
+  decimales — sin conversión de unidades)
 - Si el snapshot es el actual (`IsCurrent`)
 - Estado: `OK` o `STALE` (supera el umbral configurado)
 - Exit code para alertar cuando existen snapshots vencidos

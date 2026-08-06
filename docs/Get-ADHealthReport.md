@@ -13,9 +13,22 @@ reporte:
 - Cuentas deshabilitadas
 - Cuentas expiradas
 - Contraseñas que nunca expiran
-- Contraseñas próximas a expirar (según `maxPwdAge` del dominio)
-- Antigüedad del último backup de AD (atributo `lastBackupTime`)
+- Contraseñas próximas a expirar (según `maxPwdAge` del dominio, obtenido
+  con `Get-ADDefaultDomainPasswordPolicy` y fallback a `Get-ADDomain`)
+- Intento de consulta del último backup de AD cuando el atributo
+  `lastBackupTime` esté disponible
 - Exit code para integración con monitoreo
+
+> **Nota sobre el último backup:** el atributo `lastBackupTime` del objeto
+> `domainDNS` es un mecanismo *best-effort* — no está garantizado en todos
+> los entornos (depende de cómo se realicen los backups). El script lo
+> intenta consultar cuando está disponible y no debe considerarse un control
+> definitivo de vigencia de backup.
+>
+> **Nota sobre FGPP:** el cálculo de expiración usa la política
+> predeterminada del dominio. Las Fine-Grained Password Policies (FGPP)
+> pueden aplicar políticas distintas a subconjuntos de usuarios; este
+> cálculo no las considera individualmente.
 
 ## Requisitos
 

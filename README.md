@@ -15,12 +15,17 @@ administración de infraestructura.
 │   ├── Get-ADHealthReport.ps1        # Reporte de salud de Active Directory
 │   ├── Get-VMwareSnapshotAudit.ps1   # Auditoría de snapshots vSphere
 │   └── Test-BackupFreshness.ps1      # Verificación de vigencia de backups
+├── tests/
+│   ├── Get-ADHealthReport.Tests.ps1  # Tests Pester (mocks de cmdlets AD)
+│   ├── Get-VMwareSnapshotAudit.Tests.ps1
+│   ├── Test-BackupFreshness.Tests.ps1
+│   └── run-tests.ps1                 # Runner local de tests
 ├── docs/
 │   ├── Get-ADHealthReport.md         # Documentación completa de la herramienta
 │   ├── Get-VMwareSnapshotAudit.md
 │   └── Test-BackupFreshness.md
 └── .github/workflows/
-    └── lint.yml                      # Validación automática (CI)
+    └── lint.yml                      # CI: lint + tests
 ```
 
 ## Herramientas
@@ -66,7 +71,15 @@ Cada push ejecuta GitHub Actions con:
 
 - **PSScriptAnalyzer** sobre `scripts/*.ps1` (reglas estándar de estilo y
   buenas prácticas PowerShell)
+- **Pester** sobre `tests/*.Tests.ps1` (tests de comportamiento con mocks de
+  los cmdlets externos: AD, VMware PowerCLI y sistema de archivos)
 - **markdownlint** sobre la documentación
+
+Ejecución local de los tests:
+
+```powershell
+pwsh -File .\tests\run-tests.ps1
+```
 
 Ver el workflow en [.github/workflows/lint.yml](.github/workflows/lint.yml).
 

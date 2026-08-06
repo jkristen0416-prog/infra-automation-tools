@@ -111,19 +111,89 @@ function ConvertTo-ReportDate {
     return $Value.ToString('yyyy-MM-dd HH:mm:ss')
 }
 
+function Get-DomainMaxPasswordAge {
+    <#
+    .SYNOPSIS
+        Obtiene la antigüedad máxima de contraseña del dominio en días.
+        Prioriza Get-ADDefaultDomainPasswordPolicy (vía oficial de Microsoft)
+        con fallback a Get-ADDomain.
+    #>
+    param(
+        [Parameter(Mandatory = $false)]
+        [hashtable]$SessionParams = @{},
+
+        [Parameter(Mandatory = $false)]
+        [object]$DomainInfo
+    )
+
+    try {
+        $passwordPolicy = Get-ADDefaultDomainPasswordPolicy @SessionParams -ErrorAction Stop
+        $maxPwdAge = $passwordPolicy.MaxPasswordAge
+        if (-not $maxPwdAge -and $DomainInfo) {
+            $maxPwdAge = $DomainInfo.MaxPasswordAge
+        }
+        if ($maxPwdAge -and $maxPwdAge.TotalDays -gt 0) {
+            return [math]::Floor($maxPwdAge.TotalDays)
+        }
+    }
+    catch {
+        Write-Warning "No se pudo obtener MaxPasswordAge (Get-ADDefaultDomainPasswordPolicy): $($_.Exception.Message)"
+        if ($DomainInfo -and $DomainInfo.MaxPasswordAge) {
+            return [math]::Floor($DomainInfo.MaxPasswordAge.TotalDays)
+        }
+    }
+    return $null
+}
+
+function Get-PasswordExpiringUser {
+    <#
+    .SYNOPSIS
+        Calcula los usuarios con contraseña próxima a expirar según la
+        antigüedad máxima del dominio y el umbral de advertencia.
+
+    .NOTES
+        Usa la política predeterminada del dominio. Las Fine-Grained
+        Password Policies (FGPP) pueden aplicar políticas distintas a
+        subconjuntos de usuarios y no se consideran en este cálculo.
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [object[]]$Users,
+
+        [Parameter(Mandatory = $false)]
+        [int]$MaxAgeDays,
+
+        [Parameter(Mandatory = $false)]
+        [int]$ExpiryWarningDays = 14,
+
+        [Parameter(Mandatory = $false)]
+        [datetime]$Now = (Get-Date)
+    )
+
+    if (-not $MaxAgeDays) { return @() }
+
+    return @($Users | Where-Object {
+        $_.PasswordLastSet -and
+        -not $_.PasswordNeverExpires -and
+        $_.Enabled -and
+        ($Now - $_.PasswordLastSet).TotalDays -ge ($MaxAgeDays - $ExpiryWarningDays)
+    })
+}
+
 # ---------------------------------------------------------------------------
-# Main
+# Main (se omite al dot-sourcear para permitir pruebas con Pester)
 # ---------------------------------------------------------------------------
 
-try {
-    Assert-ADModule
-    $session = Get-ADSessionParameter -Server $DomainController -Cred $Credential
+if ($MyInvocation.InvocationName -ne '.') {
+    try {
+        Assert-ADModule
+        $session = Get-ADSessionParameter -Server $DomainController -Cred $Credential
 
-    Write-Verbose "Recopilando estado del dominio..."
-    $domainInfo = Get-ADDomain @session
+        Write-Verbose "Recopilando estado del dominio..."
+        $domainInfo = Get-ADDomain @session
 
-    Write-Verbose "Enumerando controladores de dominio..."
-    $dcs = Get-ADDomainController -Filter * @session
+        Write-Verbose "Enumerando controladores de dominio..."
+        $dcs = Get-ADDomainController -Filter * @session
 
     $now = Get-Date
     $report = [ordered]@{
@@ -143,27 +213,14 @@ try {
     $expired    = @($allUsers | Where-Object { $_.AccountExpirationDate -and $_.AccountExpirationDate -lt $now })
     $noExpire   = @($allUsers | Where-Object { $_.PasswordNeverExpires })
 
-    # Contraseñas próximas a expirar: se calcula contra el maxPwdAge del dominio
-    $maxPwdAgeDays = $null
-    try {
-        $maxPwdAge = $domainInfo.MaxPasswordAge
-        if ($maxPwdAge -and $maxPwdAge.TotalDays -gt 0) {
-            $maxPwdAgeDays = [math]::Floor($maxPwdAge.TotalDays)
-        }
-    }
-    catch {
-        Write-Warning "No se pudo obtener MaxPasswordAge: $($_.Exception.Message)"
-    }
+    # Contraseñas próximas a expirar: se calcula contra el maxPwdAge del dominio.
+    # Prioridad: Get-ADDefaultDomainPasswordPolicy (vía oficial de Microsoft),
+    # con fallback a Get-ADDomain. Nota: las Fine-Grained Password Policies
+    # (FGPP) pueden aplicar políticas distintas a subconjuntos de usuarios;
+    # este cálculo usa la política predeterminada del dominio.
+    $maxPwdAgeDays = Get-DomainMaxPasswordAge -SessionParams $session -DomainInfo $domainInfo
 
-    $passwordExpiring = @()
-    if ($maxPwdAgeDays) {
-        $passwordExpiring = @($allUsers | Where-Object {
-            $_.PasswordLastSet -and
-            -not $_.PasswordNeverExpires -and
-            $_.Enabled -and
-            ($now - $_.PasswordLastSet).TotalDays -ge ($maxPwdAgeDays - $ExpiryWarningDays)
-        })
-    }
+    $passwordExpiring = @(Get-PasswordExpiringUser -Users $allUsers -MaxAgeDays $maxPwdAgeDays -ExpiryWarningDays $ExpiryWarningDays -Now $now)
 
     $report['TotalUsers']          = @($allUsers).Count
     $report['DisabledUsers']       = @($disabled).Count
@@ -173,7 +230,11 @@ try {
     $report['MaxPasswordAgeDays']  = $maxPwdAgeDays
     $report['ExpiryWarningDays']   = $ExpiryWarningDays
 
-    Write-Verbose "Consultando fecha de último backup de AD..."
+    Write-Verbose "Intentando consultar fecha de último backup de AD (atributo lastBackupTime)..."
+    # Nota: lastBackupTime es un atributo best-effort del objeto domainDNS.
+    # No está garantizado en todos los entornos (depende de cómo se realicen
+    # los backups); este bloque intenta consultarlo cuando está disponible y
+    # no debe considerarse un control definitivo de vigencia de backup.
     try {
         $lastBackup = Get-ADObject -Filter "objectClass -eq 'domainDNS'" -Properties lastBackupTime @session
         if ($lastBackup.lastBackupTime) {
@@ -233,11 +294,12 @@ try {
 
     # Exit code para monitoreo
     if ($ok) { exit 0 } else { exit 1 }
-}
-catch {
-    if ($EnableException) {
-        throw
     }
-    Write-Error "Get-ADHealthReport falló: $($_.Exception.Message)"
-    exit 2
+    catch {
+        if ($EnableException) {
+            throw
+        }
+        Write-Error "Get-ADHealthReport falló: $($_.Exception.Message)"
+        exit 2
+    }
 }

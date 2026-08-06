@@ -80,103 +80,135 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 # ---------------------------------------------------------------------------
-# Main
+# Funciones (testables vía dot-source + Pester mocks)
 # ---------------------------------------------------------------------------
 
-try {
-    $now = Get-Date
-    $rows = @()
-    $staleCount = 0
-    $errorCount = 0
+function Get-FreshnessRow {
+    <#
+    .SYNOPSIS
+        Evalúa una ruta de backup y devuelve la fila de estado.
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FullPath,
 
-    foreach ($item in $Path) {
-        $fullPath = [System.IO.Path]::GetFullPath($item)
+        [Parameter(Mandatory = $false)]
+        [string]$Pattern = '*',
 
-        Write-Verbose "Procesando: $fullPath"
+        [Parameter(Mandatory = $false)]
+        [int]$MaxAgeHours = 24,
 
-        if (Test-Path -LiteralPath $fullPath -PathType Container) {
-            # Es una carpeta: buscar el archivo más reciente que cumpla el patrón
-            $latest = Get-ChildItem -LiteralPath $fullPath -File -Filter $Pattern -ErrorAction SilentlyContinue |
-                Sort-Object LastWriteTime -Descending |
-                Select-Object -First 1
+        [Parameter(Mandatory = $false)]
+        [datetime]$Now = (Get-Date)
+    )
 
-            if (-not $latest) {
-                Write-Warning "Sin archivos que coincidan con '$Pattern' en: $fullPath"
-                $errorCount++
-                $rows += [PSCustomObject]@{
-                    Path        = $fullPath
-                    LatestFile  = ''
-                    LastWrite   = ''
-                    AgeHours    = $null
-                    MaxAgeHours = $MaxAgeHours
-                    Status      = 'SIN ARCHIVOS'
-                }
-                continue
-            }
-        }
-        elseif (Test-Path -LiteralPath $fullPath -PathType Leaf) {
-            # Es un archivo individual
-            $latest = Get-Item -LiteralPath $fullPath
-        }
-        else {
-            Write-Warning "Ruta no encontrada: $fullPath"
-            $errorCount++
-            $rows += [PSCustomObject]@{
-                Path        = $fullPath
+    if (Test-Path -LiteralPath $FullPath -PathType Container) {
+        # Es una carpeta: buscar el archivo más reciente que cumpla el patrón
+        # Nota: se filtra por PSIsContainer en lugar de -File para que la
+        # firma sea compatible con mocks de Pester (los parámetros dinámicos
+        # del provider no se heredan en los mocks).
+        $latest = Get-ChildItem -LiteralPath $FullPath -Filter $Pattern -ErrorAction SilentlyContinue |
+            Where-Object { -not $_.PSIsContainer } |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+
+        if (-not $latest) {
+            Write-Warning "Sin archivos que coincidan con '$Pattern' en: $FullPath"
+            return [PSCustomObject]@{
+                Path        = $FullPath
                 LatestFile  = ''
                 LastWrite   = ''
                 AgeHours    = $null
                 MaxAgeHours = $MaxAgeHours
-                Status      = 'RUTA INEXISTENTE'
+                Status      = 'SIN ARCHIVOS'
             }
-            continue
         }
-
-        $ageHours = [math]::Round(($now - $latest.LastWriteTime).TotalHours, 1)
-        $isStale = $ageHours -gt $MaxAgeHours
-        if ($isStale) { $staleCount++ }
-
-        $rows += [PSCustomObject]@{
-            Path        = $fullPath
-            LatestFile  = $latest.Name
-            LastWrite   = $latest.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss')
-            AgeHours    = $ageHours
+    }
+    elseif (Test-Path -LiteralPath $FullPath -PathType Leaf) {
+        # Es un archivo individual
+        $latest = Get-Item -LiteralPath $FullPath
+    }
+    else {
+        Write-Warning "Ruta no encontrada: $FullPath"
+        return [PSCustomObject]@{
+            Path        = $FullPath
+            LatestFile  = ''
+            LastWrite   = ''
+            AgeHours    = $null
             MaxAgeHours = $MaxAgeHours
-            Status      = if ($isStale) { 'VENCIDO' } else { 'OK' }
+            Status      = 'RUTA INEXISTENTE'
         }
     }
 
-    # Salida por consola
-    $rows | Format-Table Path, LatestFile, LastWrite, AgeHours, Status -AutoSize
+    $ageHours = [math]::Round(($Now - $latest.LastWriteTime).TotalHours, 1)
+    $isStale = $ageHours -gt $MaxAgeHours
 
-    if ($staleCount -gt 0) {
-        Write-Host "`nALERTA: $staleCount backup(s) vencido(s) (mayores a $MaxAgeHours horas)." -ForegroundColor Yellow
+    return [PSCustomObject]@{
+        Path        = $FullPath
+        LatestFile  = $latest.Name
+        LastWrite   = $latest.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss')
+        AgeHours    = $ageHours
+        MaxAgeHours = $MaxAgeHours
+        Status      = if ($isStale) { 'VENCIDO' } else { 'OK' }
     }
-    if ($errorCount -gt 0) {
-        Write-Host "ATENCION: $errorCount ruta(s) con problemas de acceso o sin archivos." -ForegroundColor Yellow
-    }
-
-    if ($ExportPath) {
-        $ext = [System.IO.Path]::GetExtension($ExportPath).ToLowerInvariant()
-        switch ($ext) {
-            '.json' {
-                $rows | ConvertTo-Json -Depth 3 | Set-Content -Path $ExportPath -Encoding UTF8
-            }
-            '.csv'  {
-                $rows | ConvertTo-Csv -NoTypeInformation | Set-Content -Path $ExportPath -Encoding UTF8
-            }
-            default { throw "Formato no soportado: $ext. Use .csv o .json." }
-        }
-        Write-Host "Reporte exportado a: $ExportPath" -ForegroundColor Green
-    }
-
-    # Exit code para monitoreo
-    if ($ExitOnStale -and $staleCount -gt 0) { exit 1 }
-    if ($errorCount -gt 0 -and -not $ExitOnStale) { exit 0 }
-    if ($errorCount -gt 0) { exit 1 }
-    exit 0
 }
-catch {
-    Write-Error "Test-BackupFreshness falló: $($_.Exception.Message)"
-    exit 2
+
+# ---------------------------------------------------------------------------
+# Main (se omite al dot-sourcear para permitir pruebas con Pester)
+# ---------------------------------------------------------------------------
+
+if ($MyInvocation.InvocationName -ne '.') {
+    try {
+        $now = Get-Date
+        $rows = @()
+        $staleCount = 0
+        $errorCount = 0
+
+        foreach ($item in $Path) {
+            $fullPath = [System.IO.Path]::GetFullPath($item)
+
+            Write-Verbose "Procesando: $fullPath"
+
+            $row = Get-FreshnessRow -FullPath $fullPath -Pattern $Pattern -MaxAgeHours $MaxAgeHours -Now $now
+
+            if ($row.Status -eq 'VENCIDO') { $staleCount++ }
+            if ($row.Status -in @('SIN ARCHIVOS', 'RUTA INEXISTENTE')) { $errorCount++ }
+
+            $rows += $row
+        }
+
+        # Salida por consola
+        $rows | Format-Table Path, LatestFile, LastWrite, AgeHours, Status -AutoSize
+
+        if ($staleCount -gt 0) {
+            Write-Host "`nALERTA: $staleCount backup(s) vencido(s) (mayores a $MaxAgeHours horas)." -ForegroundColor Yellow
+        }
+        if ($errorCount -gt 0) {
+            Write-Host "ATENCION: $errorCount ruta(s) con problemas de acceso o sin archivos." -ForegroundColor Yellow
+        }
+
+        if ($ExportPath) {
+            $ext = [System.IO.Path]::GetExtension($ExportPath).ToLowerInvariant()
+            switch ($ext) {
+                '.json' {
+                    $rows | ConvertTo-Json -Depth 3 | Set-Content -Path $ExportPath -Encoding UTF8
+                }
+                '.csv'  {
+                    $rows | ConvertTo-Csv -NoTypeInformation | Set-Content -Path $ExportPath -Encoding UTF8
+                }
+                default { throw "Formato no soportado: $ext. Use .csv o .json." }
+            }
+            Write-Host "Reporte exportado a: $ExportPath" -ForegroundColor Green
+        }
+
+        # Exit code para monitoreo
+        if ($ExitOnStale -and $staleCount -gt 0) { exit 1 }
+        if ($errorCount -gt 0 -and -not $ExitOnStale) { exit 0 }
+        if ($errorCount -gt 0) { exit 1 }
+        exit 0
+    }
+    catch {
+        Write-Error "Test-BackupFreshness falló: $($_.Exception.Message)"
+        exit 2
+    }
 }
